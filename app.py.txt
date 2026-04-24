@@ -1,0 +1,239 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime, time
+import os
+
+st.set_page_config(page_title="Sistema de Gestión Operativa - Chiles Verdes", layout="wide")
+
+# --- CONFIGURACIÓN DE USUARIOS ---
+# Nombre de usuario: Contraseña
+USUARIOS_PERMITIDOS = {
+    "cesarp": "agro2026",
+    "hugov": "agro2026",
+    "yamilethl": "agro2026",
+    "davidd": "agro2026",
+    "erickv": "agro2026",
+    "eventual1": "agro2026"
+}
+
+# --- SISTEMA DE LOGUEO ---
+def login():
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.title("🔐 Acceso al Sistema")
+        st.subheader("Control Operativo de Planta")
+        # .lower() para evitar problemas con mayúsculas en el teclado del móvil
+        usuario_input = st.text_input("Nombre de Usuario").lower().strip()
+        clave_input = st.text_input("Contraseña", type="password")
+        
+        if st.button("Iniciar Sesión"):
+            if usuario_input in USUARIOS_PERMITIDOS and USUARIOS_PERMITIDOS[usuario_input] == clave_input:
+                st.session_state["logueado"] = True
+                st.session_state["usuario_actual"] = usuario_input.capitalize()
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos.")
+
+if "logueado" not in st.session_state:
+    st.session_state["logueado"] = False
+
+if not st.session_state["logueado"]:
+    login()
+    st.stop()
+
+# --- SI ESTÁ LOGUEADO, SE MUESTRA EL SISTEMA ---
+
+# --- CONFIGURACIÓN DE RESPONSABLES ---
+LISTA_RESPONSABLES = [
+    "César Padilla", "Hugo Valenzuela", "Yamileth López", 
+    "David Diaz", "Erick Valenzuela", "Otro"
+]
+
+# --- ESTRUCTURA DE BITÁCORAS ---
+BITACORAS = {
+    "INSPECCIÓN PRE OPERACIONAL DE INSTALACIONES": {
+        "Libre de evidencia animal": "check",
+        "Drenajes, tuberías y desagües limpios": "check",
+        "Pisos limpios y sin objetos fuera de lugar": "check",
+        "Luces en operación": "check",
+        "Área de maniobras en orden": "check",
+        "Botes de basura limpios y en su lugar": "check",
+        "Cortinas y puertas en buen estado": "check",
+        "Áreas de pre-enfriado funcionando": "check",
+        "Rampa externa de embarques": "check",
+        "Estructura metálica y escaleras limpias": "check",
+        "Cajas de cartón en superficie": "check",
+        "Bins de basura (hojas)": "check",
+        "Trampas de roedores en sitio": "check",
+        "Señalamientos de plaga": "check",
+        "Drenajes sin basura": "check",
+        "Motores/Cadenas sin derrames": "check",
+        "Tinas y desinfección de producto": "check",
+        "Elevadores": "check",
+        "Cepillos": "check",
+        "Bandas": "check",
+        "Cajones de producto (bancos)": "check",
+        "Línea de rezaga": "check",
+        "Ventiladores": "check",
+        "Estaciones de lavado de manos (sin fugas)": "check",
+        "Despachadores de jabón/gel llenos": "check",
+        "Cumplimiento vestimenta/EPP": "check",
+        "Manos lavadas/uñas cortas": "check",
+        "Libre de heridas/enfermedad": "check"
+    },
+    "Inspección de Maquinaria": {
+        "TOLVA": "check", "ELEVADOR": "check", "ASPERSORES": "check", 
+        "TINA DE AGUA": "check", "BOMBA DE AGUA": "check", "CEPILLOS DE ENJUAGE": "check", 
+        "ABANICOS DE SECADO": "check", "BANDA DE SELECCION": "check", "LUZ": "check"
+    },
+    "Limpieza de Instalaciones": {
+        "ANDEN": "check", "COMEDOR": "check", "BANDAS": "check", "ELEVADOR": "check", 
+        "ABANICOS": "check", "TINA": "check", "AREA DE PRODUCTO TERMINADO": "check", 
+        "CUARTOS FRIOS": "check", "AREA DE OBJETOS PERSONALES": "check", "LAMPARAS": "check", 
+        "PISO": "check", "AREA DE CARTON": "check", "RODILLOS": "check", "CORTINAS": "check", 
+        "PUERTAS": "check", "Desagüe": "check"
+    },
+    "Limpieza de Sanitarios y Suministros": {
+        "LIMPIEZA": "check", "DESINFECCION": "check", "REPARACION DE FUGAS": "check", 
+        "AGUA POTABLE": "check", "JABON LIQUIDO": "check", "GEL ANTIBACTERIAL": "check", 
+        "PAPEL HIGIENICO": "check", "TOALLAS DE SECADO": "check", "BOTE DE BASURA": "check", 
+        "BOLSA PARA BASURA": "check"
+    },
+    "Recepción de Materia Prima": { 
+        "No. (Lote/Folio)": "texto", "Producto": "prod_materia_prima",
+        "Proveedor y/o Rancho": "texto", "Presentación": "pres_materia_prima",
+        "Cantidad (kg)": "numero", "Transporte": "texto"
+    },
+    "Condiciones de Transporte de Entrada": {
+        "TRANSPORTE (Marca)": "texto", "PLACAS": "texto", "ORIGEN": "texto",
+        "UNIDAD LIMPIA": "check", "UNIDAD SUCIA": "check", 
+        "DESCRIPCION DE SUCIEDAD": "texto", "TEMPERATURA (°C)": "numero"
+    },
+    "Condiciones de Transporte de Salida": {
+        "Transporte (Marca)": "texto", "Placas": "texto", "Destino": "texto",
+        "Unidad Limpia": "check", "Temperatura de Carga (°C)": "numero",
+        "No. de Manifiesto": "texto", "Nombre del Chofer": "texto"
+    },
+    "Registro de Preparación de Cloro": {
+        "Hora de Inicio": "hora", "Área Inicial": "tinas",
+        "Cambio 1": "hora", "Área 1": "tinas", "Cambio 2": "hora", "Área 2": "tinas",
+        "Cambio 3": "hora", "Área 3": "tinas", "Cambio 4": "hora", "Área 4": "tinas",
+        "Cambio 5": "hora", "Área 5": "tinas", "Cambio 6": "hora", "Área 6": "tinas"
+    },
+    "Registro de Turbiedad del Agua": { 
+        "C1": "turbiedad", "C2": "turbiedad", "C3": "turbiedad", "C4": "turbiedad",
+        "C5": "turbiedad", "C6": "turbiedad", "C7": "turbiedad", "C8": "turbiedad",
+        "C9": "turbiedad", "C10": "turbiedad"
+    },
+    "Control de Temperaturas Cuarto Frío": {
+        "Temp Pre-enfriado (°C)": "numero", "Tiempo Preenfriado": "texto",
+        "Temp Cuarto Frio (°C)": "numero", "Hora de Carga": "hora",
+        "Temp de Carga (°C)": "numero", "Responsable de Carga": "texto"
+    },
+    "Registro de Limpieza de Bins": {
+        "Bins Lavados": "numero", "Acción": "accion_bins", "Concentración ppm": "numero"
+    },
+    "Registro de Higiene de los Trabajadores": "ESPECIAL_TABLA"
+}
+
+def guardar_datos(nombre_archivo, datos):
+    df_nuevo = pd.DataFrame([datos]) if isinstance(datos, dict) else pd.DataFrame(datos)
+    if os.path.exists(nombre_archivo):
+        df_existente = pd.read_csv(nombre_archivo)
+        df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+    else:
+        df_final = df_nuevo
+    df_final.to_csv(nombre_archivo, index=False)
+
+# --- NAVEGACIÓN ---
+st.sidebar.write(f"🟢 Conectado como: **{st.session_state['usuario_actual']}**")
+if st.sidebar.button("Cerrar Sesión"):
+    st.session_state["logueado"] = False
+    st.rerun()
+
+st.sidebar.header("Menú de Bitácoras")
+seleccion = st.sidebar.selectbox("Seleccione:", list(BITACORAS.keys()))
+st.title(f"📋 {seleccion.upper()}")
+archivo_csv = f"data_{seleccion.lower().replace(' ', '_')}.csv"
+
+# --- LÓGICA DE FORMULARIO ---
+if seleccion == "Registro de Higiene de los Trabajadores":
+    c1, c2, c3 = st.columns(3)
+    with c1: fecha = st.date_input("Fecha", datetime.now())
+    with c2: 
+        resp_sel = st.selectbox("Supervisor", LISTA_RESPONSABLES)
+        resp = st.text_input("Nombre de Nuevo Supervisor") if resp_sel == "Otro" else resp_sel
+    with c3: turno = st.selectbox("Turno", ["Matutino", "Vespertino", "Nocturno"])
+    
+    datos_h = [{"Nombre": "", "Hora": "07:00 AM", "Uñas": False, "Heridas": False, "Cofia": False, "Joyas": False, "Ropa": False} for _ in range(28)]
+    df_editado = st.data_editor(pd.DataFrame(datos_h), use_container_width=True)
+    obs_h = st.text_area("Observaciones de Higiene:")
+    
+    if st.button("Guardar Registro"):
+        if resp:
+            df_final_h = df_editado.copy()
+            df_final_h["Fecha"], df_final_h["Supervisor"], df_final_h["Turno"], df_final_h["Observaciones"] = fecha, resp, turno, obs_h
+            df_final_h["Sesion_Por"] = st.session_state["usuario_actual"]
+            guardar_datos(archivo_csv, df_final_h)
+            st.balloons(); st.success("Guardado.")
+        else: st.error("Falta Supervisor.")
+
+else:
+    puntos_revision = BITACORAS[seleccion]
+    with st.form("form_general", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1: fecha = st.date_input("Fecha", datetime.now())
+        with c2: 
+            resp_sel = st.selectbox("Responsable del Registro", LISTA_RESPONSABLES)
+            resp_otro = st.text_input("Si eligió 'Otro', escriba el nombre aquí:")
+        with c3: turno = st.selectbox("Turno", ["Matutino", "Vespertino", "Nocturno"])
+        
+        respuestas = {}
+        st.markdown("---")
+        
+        if seleccion == "Registro de Turbiedad del Agua":
+            for i in range(1, 11):
+                ca1, ca2, ca3 = st.columns([1, 2, 2])
+                with ca1: st.write(f"Cambio {i}")
+                with ca2: respuestas[f"Hora_{i}"] = st.time_input(f"H{i}", value=time(7,0), key=f"h{i}").strftime("%I:%M %p")
+                with ca3: respuestas[f"JTUS_{i}"] = st.selectbox(f"J{i}", [60, 80, 100], key=f"j{i}")
+        elif seleccion == "Registro de Preparación de Cloro":
+            items = list(puntos_revision.items())
+            for i in range(0, len(items), 2):
+                ca1, ca2 = st.columns(2)
+                with ca1: respuestas[items[i][0]] = st.time_input(items[i][0], key=f"clh{i}").strftime("%I:%M %p")
+                if i+1 < len(items):
+                    with ca2: respuestas[items[i+1][0]] = st.selectbox(items[i+1][0], ["Tina 1", "Tina 2"], key=f"cla{i}")
+        else:
+            cols = st.columns(2)
+            for i, (punto, tipo) in enumerate(puntos_revision.items()):
+                with cols[i % 2]:
+                    if tipo == "check": respuestas[punto] = st.checkbox(punto)
+                    elif tipo == "texto": respuestas[punto] = st.text_input(punto)
+                    elif tipo == "numero": respuestas[punto] = st.number_input(punto, step=0.1)
+                    elif tipo == "hora": respuestas[punto] = st.time_input(punto, key=f"genh{i}").strftime("%I:%M %p")
+                    elif tipo == "prod_materia_prima": respuestas[punto] = st.selectbox(punto, ["Jalapeño", "Anaheim", "Serrano", "Caribe", "Poblano", "Morrón", "Tomatillo"])
+                    elif tipo == "pres_materia_prima": respuestas[punto] = st.selectbox(punto, ["BINS", "ARPILLA", "REJAS", "GRANEL", "CAJA"])
+                    elif tipo == "accion_bins": respuestas[punto] = st.selectbox(punto, ["Lavado", "Desinfección", "Lavado y Desinfección"])
+
+        st.markdown("---")
+        obs = st.text_area("Observaciones Generales:")
+        
+        if st.form_submit_button("Guardar Registro Completo"):
+            responsable_final = resp_otro if resp_sel == "Otro" else resp_sel
+            if responsable_final:
+                registro = {
+                    "Fecha": fecha, "Responsable": responsable_final, 
+                    "Turno": turno, "Observaciones": obs,
+                    "Sesion_Por": st.session_state["usuario_actual"]
+                }
+                registro.update(respuestas)
+                guardar_datos(archivo_csv, registro)
+                st.balloons(); st.success(f"Guardado.")
+            else: st.error("Falta especificar el responsable.")
+
+st.divider()
+with st.expander("Historial"):
+    if os.path.exists(archivo_csv):
+        df_ver = pd.read_csv(archivo_csv)
+        st.dataframe(df_ver)
